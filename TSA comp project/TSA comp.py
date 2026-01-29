@@ -153,10 +153,10 @@ def stop_recording():
         stream = None
 
     if not audio_data:
-        print("❌ No audio recorded")
+        print(" No audio recorded")
         return
 
-    print("🧠 Transcribing...")
+    print(" Transcribing...")
 
     audio_np = np.concatenate(audio_data, axis=0).flatten()
 
@@ -170,7 +170,7 @@ def stop_recording():
 
     full_text = " ".join(seg.text.strip() for seg in segments)
 
-    print("💬 FINAL TRANSCRIPT:")
+    print(" FINAL TRANSCRIPT:")
     def update_ui():
         transcriptBox.configure(state="normal")
         transcriptBox.delete("0.0", "end")
@@ -327,4 +327,5 @@ def stop_listening():
 
 
 mainMenu()
+
 app.mainloop()
