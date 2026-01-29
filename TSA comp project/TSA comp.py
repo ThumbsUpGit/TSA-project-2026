@@ -25,9 +25,9 @@ import speech_recognition as sr
 
 print("Loading Faster-Whisper model...")
 model = WhisperModel(
-    "base",               # small / base / medium (base is fast & accurate)
-    device="cpu",         # or "cuda" if you have NVIDIA GPU
-    compute_type="int8"   # HUGE speed boost on CPU
+    "base",               # model size
+    device="cpu",         # device configured
+    compute_type="int8"   # boosts speed
 )
 
 
@@ -41,7 +41,7 @@ app.resizable(False, False)
 ctk.set_appearance_mode("dark")
 purple = False
 
-# Define a font to reuse
+# Font
 my_font = ctk.CTkFont(family="Arial", size=22, weight="bold")
 
 try:
@@ -114,9 +114,10 @@ def mainMenu():
     btn2.place(relx=0.2, rely=0.8, anchor="center")
     
 
-# Button functions
+# Button works
 def click_one():
     print("world wide five")
+    # to be Sign Language translator, need to choose which one is available
 
 def click_two():
     print("world wide three")
@@ -246,7 +247,7 @@ def transcribe_recording():
 
 
 
-
+#not touching anything here, needs to be solidified and concrete after SL translate
 
 
 def autoScript():
@@ -329,3 +330,4 @@ def stop_listening():
 mainMenu()
 
 app.mainloop()
+
