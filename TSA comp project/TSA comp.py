@@ -1,22 +1,34 @@
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
+import speech_recognition
 import os
 import threading
+import numpy as np
+import soundfile as sf
+from io import BytesIO
+import librosa
+import sounddevice as sd
+
+
+
+
+
 
 os.environ["PATH"] += ";D:\\ffmpeg\\ffmpeg-8.0.1-essentials_build\\bin"
 
-import whisper
-import whisper.audio
-whisper.audio.FFMPEG_BINARY = "D:\\ffmpeg\\ffmpeg-8.0.1-essentials_build\\bin\\ffmpeg.exe"
+from faster_whisper import WhisperModel
+
+#whisper.audio.FFMPEG_BINARY = "D:\\ffmpeg\\ffmpeg-8.0.1-essentials_build\\bin\\ffmpeg.exe"
 
 import speech_recognition as sr
 #import threading
 
-print("FFmpeg path:", whisper.audio.FFMPEG_BINARY)
-
-
-print("Loading Whisper model...")
-model = whisper.load_model("turbo")
+print("Loading Faster-Whisper model...")
+model = WhisperModel(
+    "base",               # small / base / medium (base is fast & accurate)
+    device="cpu",         # or "cuda" if you have NVIDIA GPU
+    compute_type="int8"   # HUGE speed boost on CPU
+)
 
 
 # Create main window
@@ -110,29 +122,129 @@ def click_two():
     print("world wide three")
     autoScript()
 
-listening = False
 
-def listen_loop():
-    global listening
+def start_recording():
+    global recording, audio_data, stream
+    recording = True
+    audio_data = []
+
+    def callback(indata, frames, time, status):
+        if recording:
+            audio_data.append(indata.copy())
+
+    stream = sd.InputStream(
+        samplerate=sample_rate,
+        channels=1,
+        callback=callback
+    )
+    stream.start()
+
+    print("🎙️ Recording started")
+
+
+
+def stop_recording():
+    global recording, stream
+    recording = False
+
+    if stream:
+        stream.stop()
+        stream.close()
+        stream = None
+
+    if not audio_data:
+        print("❌ No audio recorded")
+        return
+
+    print("🧠 Transcribing...")
+
+    audio_np = np.concatenate(audio_data, axis=0).flatten()
+
+    segments, info = model.transcribe(
+        audio_np,
+        beam_size=1,
+        vad_filter=True,
+        temperature=0.0,
+        language="en"
+    )
+
+    full_text = " ".join(seg.text.strip() for seg in segments)
+
+    print("💬 FINAL TRANSCRIPT:")
+    def update_ui():
+        transcriptBox.configure(state="normal")
+        transcriptBox.delete("0.0", "end")
+        transcriptBox.insert("0.0", full_text)
+        transcriptBox.configure(state="disabled")
+
+    app.after(0, update_ui)
+
+
+
+
+
+
+# globals I cant find them sometimes
+recording = False
+audio_data = []
+sample_rate = 16000
+stream = None
+transcriptBox = None
+
+
+
+def record_loop():
+    global recording, audio_frames
+
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
 
     with mic as source:
         recognizer.adjust_for_ambient_noise(source)
 
-    while listening:
-        with mic as source:
-            print("🎤 Listening...")
-            audio = recognizer.listen(source, phrase_time_limit=3)
+    audio_frames = []
 
-        with open("temp.wav", "wb") as f:
-            f.write(audio.get_wav_data())
+    while recording:
+        try:
+            with mic as source:
+                audio = recognizer.listen(
+                    source,
+                    phrase_time_limit=None,
+                    timeout=None
+                )
+                audio_frames.append(audio.get_wav_data())
+        except sr.WaitTimeoutError:
+            continue
 
-        result = model.transcribe("temp.wav", fp16=False)
-        text = result["text"].strip()
+def transcribe_recording():
+    if not audio_frames:
+        print("No audio recorded")
+        return
 
-        if text:
-            print(f"💬 {text}")
+    print("🧠 Transcribing...")
+
+    wav_bytes = b"".join(audio_frames)
+    audio_buffer = BytesIO(wav_bytes)
+
+    audio_np, sample_rate = sf.read(audio_buffer, dtype="float32")
+
+    if len(audio_np.shape) > 1:
+        audio_np = audio_np.mean(axis=1)
+
+    segments, info = model.transcribe(
+        audio_np,
+        beam_size=1,
+        vad_filter=True,
+        temperature=0.0,
+        language="en"
+    )
+
+    full_text = " ".join(segment.text.strip() for segment in segments)
+    print("💬 FINAL TRANSCRIPT:")
+    print(full_text)
+
+
+
 
 
 
@@ -141,10 +253,11 @@ def autoScript():
     global listening
     clear_screen()
     listening = True
+    global transcriptBox
 
     label = ctk.CTkLabel(
         master=app,
-        text="Live Listening",
+        text="Bravo",
         text_color="white",
         fg_color="#08000a",
         corner_radius=12,
@@ -153,6 +266,28 @@ def autoScript():
         font=my_font
     )
     label.place(relx=0.5, rely=0.2, anchor="center")
+
+    record_btn = ctk.CTkButton(
+        master=app,
+        text="Start",
+        corner_radius=24,
+        fg_color="#08000a",
+        font=my_font,
+        command= start_recording
+    )
+    record_btn.place(relx=0.5, rely=0.3, anchor="center")
+
+    stoprecord_btn = ctk.CTkButton(
+        master=app,
+        text="Stop",
+        corner_radius=24,
+        fg_color="#08000a",
+        font=my_font,
+        command= stop_recording
+    )
+    stoprecord_btn.place(relx=0.3, rely=1, anchor="center")
+
+    
 
     back_btn = ctk.CTkButton(
         master=app,
@@ -164,7 +299,23 @@ def autoScript():
     )
     back_btn.place(relx=0.5, rely=0.8, anchor="center")
 
-    threading.Thread(target=listen_loop, daemon=True).start()
+    global transcriptBox
+
+    transcriptBox = ctk.CTkTextbox(
+        master=app,
+        width=420,
+        height=100,
+        corner_radius=12,
+        font=ctk.CTkFont(size=14)
+    )
+    transcriptBox.place(relx=0.5, rely=0.5, anchor="center")
+    transcriptBox.insert("0.0", "Press Start and speak...\n")
+    transcriptBox.configure(state="disabled")
+
+    
+
+
+    #threading.Thread(target=listen_loop, daemon=True).start()
 
 def stop_listening():
     global listening
